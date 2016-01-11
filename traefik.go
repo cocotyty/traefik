@@ -27,6 +27,7 @@ import (
 	"github.com/thoas/stats"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"sync"
+	"encoding/json"
 )
 
 var (
@@ -304,6 +305,26 @@ func LoadConfig(configurations configs, globalConfiguration *GlobalConfiguration
 			fwd, _ := forward.New(forward.Logger(oxyLogger), forward.PassHostHeader(frontend.PassHostHeader))
 			newRoute := router.NewRoute().Name(frontendName)
 			for routeName, route := range frontend.Routes {
+
+				//hack to use json for host with many  path rule
+				if route.Rule == "complex"{
+					kv:=[]map[string]string{}
+					err:=json.Unmarshal([]byte(strings.TrimSpace(route.Value)),&kv)
+					if err!=nil{
+						continue
+					}
+					for _,kvMap:=range kv{
+						if _,hasRule:=kvMap["rule"];hasRule{
+							log.Debugf("Creating route %s %s:%s", routeName, kvMap["rule"], kvMap["value"])
+							newRouteReflect, err := invoke(newRoute,  kvMap["rule"], kvMap["value"])
+							if err != nil {
+								return nil, err
+							}
+							newRoute = newRouteReflect[0].Interface().(*mux.Route)
+						}
+					}
+					continue
+				}
 				log.Debugf("Creating route %s %s:%s", routeName, route.Rule, route.Value)
 				newRouteReflect, err := invoke(newRoute, route.Rule, route.Value)
 				if err != nil {
